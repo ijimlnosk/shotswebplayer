@@ -41,16 +41,26 @@ export default function App() {
       else player.current.cueVideoById(args);
     }
 
-    window.loadQueue = (ids, muted) => {
+    // volume: 0~100 정수 (YT IFrame API 스케일). Swift 볼륨 슬라이더(0~1)에 100을 곱해서 넘겨줌.
+    // 음소거는 따로 관리하지 않고 이 함수 하나가 다 처리함: 0이면 음소거, 0보다 크면 그 크기로 소리 남
+    window.setVolumeLevel = (volume) => {
+      if (!player.current) return;
+      if (volume <= 0) player.current.mute();
+      else {
+        player.current.unMute();
+        player.current.setVolume(volume);
+      }
+    };
+
+    window.loadQueue = (ids, volume) => {
       queue.current = Array.isArray(ids) ? ids.filter(Boolean) : [];
       cursor.current = 0;
       setIndex(0);
       if (!player.current) {
-        pending.current = { ids: queue.current, muted };
+        pending.current = { ids: queue.current, volume };
         return;
       }
-      if (muted) player.current.mute();
-      else player.current.unMute();
+      window.setVolumeLevel(volume);
       play(0);
     };
     window.playNext = () => play(cursor.current + 1);
@@ -62,10 +72,6 @@ export default function App() {
       else player.current.playVideo();
     };
     window.resumePlaying = () => player.current?.playVideo();
-    window.muteVideo = () => player.current?.mute();
-    window.unmuteVideo = () => player.current?.unMute();
-    // volume: 0~100 정수 (YT IFrame API 스케일). Swift 쪽 슬라이더(0~1)에 100을 곱해서 넘겨줌
-    window.setVolumeLevel = (volume) => player.current?.setVolume(volume);
 
     function createPlayer() {
       if (player.current || !mountRef.current) return;
@@ -88,7 +94,7 @@ export default function App() {
             setReady(true);
             const queued = pending.current;
             pending.current = null;
-            if (queued) window.loadQueue(queued.ids, queued.muted);
+            if (queued) window.loadQueue(queued.ids, queued.volume);
           },
           onStateChange: (e) => {
             if (e.data === 1) skippedCount.current = 0; // 1 === PLAYING: 정상 재생되면 실패 카운트 리셋
@@ -135,8 +141,8 @@ export default function App() {
       else
         window.loadQueue(
           items.map((v) => v.id),
-          true,
-        );
+          100,
+        ); // 브라우저에서 직접 테스트할 땐 소리 켜진 채로
     } catch (err) {
       setError(err.message);
       setVideos([]);
