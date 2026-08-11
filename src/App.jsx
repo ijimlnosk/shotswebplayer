@@ -64,6 +64,8 @@ export default function App() {
     window.resumePlaying = () => player.current?.playVideo();
     window.muteVideo = () => player.current?.mute();
     window.unmuteVideo = () => player.current?.unMute();
+    // volume: 0~100 정수 (YT IFrame API 스케일). Swift 쪽 슬라이더(0~1)에 100을 곱해서 넘겨줌
+    window.setVolumeLevel = (volume) => player.current?.setVolume(volume);
 
     function createPlayer() {
       if (player.current || !mountRef.current) return;
