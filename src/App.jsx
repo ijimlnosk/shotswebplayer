@@ -26,19 +26,35 @@ export default function App() {
   const pending = useRef(null); // queue handed over before the player was ready
   const mountRef = useRef(null);
   const skippedCount = useRef(0); // 연속 재생 실패 개수 (전부 실패 시 무한루프 방지용)
+  const requestingMoreRef = useRef(false); // Swift에 다음 페이지 요청 중복 방지용
 
   // --- YouTube IFrame API + window bridge --------------------------------
   // Swift calls these by name through evaluateJavaScript, so every one of them
   // has to live on window, not just in this component's scope.
   useEffect(() => {
+    // 큐 끝에서 5개 이내로 남으면 Swift한테 "더 줘" 신호를 보내서 검색 결과가
+    // 끊기지 않고 계속 이어지게 함 (진짜 쇼츠 피드처럼 무한 스크롤)
+    function maybeRequestMore() {
+      const remaining = queue.current.length - 1 - cursor.current;
+      if (remaining > 5 || requestingMoreRef.current) return;
+      requestingMoreRef.current = true;
+      try {
+        window.webkit.messageHandlers.requestMore.postMessage("more");
+      } catch (e) {}
+    }
+
     function play(i, { autoplay = true } = {}) {
       const ids = queue.current;
       if (!ids.length || !player.current) return;
-      cursor.current = Math.min(Math.max(i, 0), ids.length - 1);
+      // 끝에서 clamp(고정)하지 않고 modulo로 순환시켜서, 마지막 영상 이후에도
+      // 멈추지 않고 처음부터 계속 이어지게 함 (음수 인덱스도 안전하게 처리)
+      const len = ids.length;
+      cursor.current = ((i % len) + len) % len;
       setIndex(cursor.current);
       const args = { videoId: ids[cursor.current] };
       if (autoplay) player.current.loadVideoById(args);
       else player.current.cueVideoById(args);
+      maybeRequestMore();
     }
 
     // volume: 0~100 정수 (YT IFrame API 스케일). Swift 볼륨 슬라이더(0~1)에 100을 곱해서 넘겨줌.
@@ -52,10 +68,19 @@ export default function App() {
       }
     };
 
+    // Swift가 다음 페이지 검색 결과를 가져오면 이 함수로 큐 끝에 이어붙임
+    window.appendQueue = (ids) => {
+      const fresh = Array.isArray(ids) ? ids.filter(Boolean) : [];
+      if (!fresh.length) return;
+      queue.current = [...queue.current, ...fresh];
+      requestingMoreRef.current = false; // 새로 받았으니 나중에 또 부족해지면 다시 요청 가능하게
+    };
+
     window.loadQueue = (ids, volume) => {
       queue.current = Array.isArray(ids) ? ids.filter(Boolean) : [];
       cursor.current = 0;
       setIndex(0);
+      requestingMoreRef.current = false;
       if (!player.current) {
         pending.current = { ids: queue.current, volume };
         return;
