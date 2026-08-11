@@ -1,0 +1,131 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0b0b0d;
+  color: #f2f2f5;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100vh;
+  padding: 10px;
+}
+
+.bar {
+  display: flex;
+  gap: 6px;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #2a2a30;
+  border-radius: 10px;
+  background: #16161a;
+  color: inherit;
+  font-size: 13px;
+}
+
+button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #ff3b30;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.keyInput {
+  width: 100%;
+}
+
+/* 9:16 stage that shrinks to whatever the widget window gives it. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.frame {
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  max-width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+}
+
+.frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 20px;
+  background: #000;
+  border-radius: 14px;
+  color: #8a8a92;
+  font-size: 13px;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.sub,
+.err {
+  color: #8a8a92;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.err {
+  color: #ff6b6b;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav button {
+  padding: 4px 10px;
+  background: #26262c;
+}
