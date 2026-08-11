@@ -25,6 +25,7 @@ export default function App() {
   const cursor = useRef(0);
   const pending = useRef(null); // queue handed over before the player was ready
   const mountRef = useRef(null);
+  const skippedCount = useRef(0); // 연속 재생 실패 개수 (전부 실패 시 무한루프 방지용)
 
   // --- YouTube IFrame API + window bridge --------------------------------
   // Swift calls these by name through evaluateJavaScript, so every one of them
@@ -68,7 +69,18 @@ export default function App() {
       if (player.current || !mountRef.current) return;
       player.current = new window.YT.Player(mountRef.current, {
         host: "https://www.youtube-nocookie.com",
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+        // autoplay/mute를 명시적으로 안 주면 브라우저 자동재생 정책에 막혀서
+        // "재생하려면 클릭" 상태(유튜브 로고만 뜨는 화면)로 멈춰있게 됨
+        playerVars: {
+          autoplay: 1,
+          mute: 1,
+          controls: 0,
+          playsinline: 1,
+          modestbranding: 1,
+          rel: 0,
+          fs: 0,
+          disablekb: 1,
+        },
         events: {
           onReady: () => {
             setReady(true);
@@ -76,9 +88,16 @@ export default function App() {
             pending.current = null;
             if (queued) window.loadQueue(queued.ids, queued.muted);
           },
-          // 0 === ENDED: keep the feed rolling like a shorts reel.
           onStateChange: (e) => {
-            if (e.data === 0) window.playNext();
+            if (e.data === 1) skippedCount.current = 0; // 1 === PLAYING: 정상 재생되면 실패 카운트 리셋
+            if (e.data === 0) window.playNext(); // 0 === ENDED: 다음 영상으로 이어서 재생
+          },
+          // 소유자가 임베드를 막았거나, 삭제/비공개/연령제한 등으로 재생 불가한 영상을 만나면
+          // "오류가 발생했습니다" 화면에서 멈추지 말고 자동으로 다음 영상으로 넘어감
+          onError: () => {
+            skippedCount.current += 1;
+            if (skippedCount.current >= queue.current.length) return; // 전부 실패 시 무한루프 방지
+            window.playNext();
           },
         },
       });
