@@ -19,6 +19,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [listOpen, setListOpen] = useState(false); // 네이티브 "목록 보기" 버튼으로 여는 썸네일+제목 리스트
+  const [listItems, setListItems] = useState([]); // [{id, title}, ...] — Swift가 toggleVideoList로 넘겨줌
 
   const player = useRef(null);
   const queue = useRef([]); // video ids, source of truth for the Swift bridge
@@ -90,6 +92,19 @@ export default function App() {
     };
     window.playNext = () => play(cursor.current + 1);
     window.playPrevious = () => play(cursor.current - 1);
+
+    // 네이티브 "목록 보기" 글래스 버튼이 누를 때마다 부르는 함수.
+    // items: [{id, title}, ...] — 켜져 있으면 끄고, 꺼져 있으면 최신 목록으로 켬
+    window.toggleVideoList = (items) => {
+      setListItems(Array.isArray(items) ? items : []);
+      setListOpen((open) => !open);
+    };
+
+    // 목록에서 영상을 클릭했을 때: 현재 큐 안에서 해당 id를 찾아 그 위치로 점프해서 재생
+    window.playVideoById = (id) => {
+      const idx = queue.current.indexOf(id);
+      if (idx >= 0) play(idx);
+    };
     window.togglePlayPause = () => {
       if (!player.current) return;
       // 1 === YT.PlayerState.PLAYING
@@ -223,12 +238,79 @@ export default function App() {
         />
       )}
 
-      <div className="stage">
+      <div className="stage" style={{ position: "relative" }}>
         <div className="frame">
           <div ref={mountRef} />
         </div>
         {!isEmbed && !videos.length && (
           <div className="empty">{error || "검색어를 입력하세요"}</div>
+        )}
+
+        {listOpen && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 50,
+              background: "rgba(0,0,0,0.88)",
+              overflowY: "auto",
+              padding: 10,
+              boxSizing: "border-box",
+            }}
+          >
+            {listItems.length === 0 && (
+              <div
+                style={{
+                  color: "#999",
+                  fontSize: 13,
+                  textAlign: "center",
+                  marginTop: 24,
+                }}
+              >
+                목록이 비어 있어요
+              </div>
+            )}
+            {listItems.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => {
+                  window.playVideoById(item.id);
+                  setListOpen(false);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 6,
+                  cursor: "pointer",
+                  borderRadius: 8,
+                  overflow: "hidden",
+                  background: "rgba(255,255,255,0.06)",
+                }}
+              >
+                <img
+                  src={`https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`}
+                  alt=""
+                  style={{
+                    width: 76,
+                    height: 43,
+                    objectFit: "cover",
+                    flexShrink: 0,
+                  }}
+                />
+                <div
+                  style={{
+                    color: "#fff",
+                    fontSize: 12,
+                    lineHeight: 1.3,
+                    paddingRight: 8,
+                  }}
+                >
+                  {item.title || item.id}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
