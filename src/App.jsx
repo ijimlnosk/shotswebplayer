@@ -71,6 +71,23 @@ export default function App() {
       }
     };
 
+    // 탐색 바(재생 위치 이동)에서 사용. fraction: 0~1, 전체 길이에 대한 비율
+    window.seekToFraction = (fraction) => {
+      if (!player.current) return;
+      const duration = player.current.getDuration() || 0;
+      if (duration <= 0) return;
+      player.current.seekTo(duration * fraction, true);
+    };
+
+    // Swift가 0.5초마다 이 값을 읽어가서 탐색 바 위치를 갱신함
+    window.getPlaybackProgress = () => {
+      if (!player.current) return { current: 0, duration: 0 };
+      return {
+        current: player.current.getCurrentTime() || 0,
+        duration: player.current.getDuration() || 0,
+      };
+    };
+
     // Swift가 다음 페이지 검색 결과를 가져오면 이 함수로 큐 끝에 이어붙임
     window.appendQueue = (ids) => {
       const fresh = Array.isArray(ids) ? ids.filter(Boolean) : [];
