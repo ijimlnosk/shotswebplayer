@@ -19,8 +19,8 @@ export default function App() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
-  const [listOpen, setListOpen] = useState(false); // 네이티브 "목록 보기" 버튼으로 여는 썸네일+제목 리스트
-  const [listItems, setListItems] = useState([]); // [{id, title}, ...] — Swift가 toggleVideoList로 넘겨줌
+  const [listOpen, setListOpen] = useState(false); // 네이티브 "목록 보기" 버튼으로 여는 썸네일+제목+길이 리스트
+  const [listItems, setListItems] = useState([]); // [{id, title, duration}, ...] — Swift가 openVideoList로 넘겨줌
 
   const player = useRef(null);
   const queue = useRef([]); // video ids, source of truth for the Swift bridge
@@ -28,7 +28,8 @@ export default function App() {
   const pending = useRef(null); // queue handed over before the player was ready
   const mountRef = useRef(null);
   const skippedCount = useRef(0); // 연속 재생 실패 개수 (전부 실패 시 무한루프 방지용)
-  const requestingMoreRef = useRef(false); // Swift에 다음 페이지 요청 중복 방지용
+  const requestingMoreRef = useRef(false); // Swift에 다음 페이지 요청 중복 방지용 (재생 큐용)
+  const listRequestingMoreRef = useRef(false); // Swift에 다음 페이지 요청 중복 방지용 (목록 스크롤용)
 
   // --- YouTube IFrame API + window bridge --------------------------------
   // Swift calls these by name through evaluateJavaScript, so every one of them
@@ -93,17 +94,41 @@ export default function App() {
     window.playNext = () => play(cursor.current + 1);
     window.playPrevious = () => play(cursor.current - 1);
 
-    // 네이티브 "목록 보기" 글래스 버튼이 누를 때마다 부르는 함수.
-    // items: [{id, title}, ...] — 켜져 있으면 끄고, 꺼져 있으면 최신 목록으로 켬
-    window.toggleVideoList = (items) => {
+    // 네이티브 "목록 보기" 글래스 버튼을 누르면 Swift가 부름 (열 때/닫을 때 각각 다른 함수를 확실하게 호출함 —
+    // 토글 하나로 하면 목록에서 영상을 골라 스스로 닫혔을 때 네이티브 쪽 상태랑 어긋날 수 있어서 분리함)
+    window.openVideoList = (items) => {
       setListItems(Array.isArray(items) ? items : []);
-      setListOpen((open) => !open);
+      listRequestingMoreRef.current = false;
+      setListOpen(true);
+    };
+    window.closeVideoList = () => setListOpen(false);
+
+    // Swift가 스크롤로 더 불러온 결과를 목록 끝에 이어붙일 때 사용
+    window.appendVideoList = (items) => {
+      const fresh = Array.isArray(items) ? items : [];
+      if (!fresh.length) return;
+      setListItems((prev) => [...prev, ...fresh]);
+      listRequestingMoreRef.current = false;
     };
 
-    // 목록에서 영상을 클릭했을 때: 현재 큐 안에서 해당 id를 찾아 그 위치로 점프해서 재생
+    // 목록 스크롤이 바닥에 가까워지면 Swift한테 다음 페이지를 요청 (재생 큐용 requestMore랑 같은 채널 재사용)
+    window.maybeRequestMoreForList = () => {
+      if (listRequestingMoreRef.current) return;
+      listRequestingMoreRef.current = true;
+      try {
+        window.webkit.messageHandlers.requestMore.postMessage("list-scroll");
+      } catch (e) {}
+    };
+
+    // 목록에서 영상을 클릭했을 때: 현재 큐 안에서 해당 id를 찾아 그 위치로 점프해서 재생하고,
+    // 목록을 닫으면서 네이티브 쪽에도 "닫혔다"고 알려서 드래그가 다시 켜지게 함
     window.playVideoById = (id) => {
       const idx = queue.current.indexOf(id);
       if (idx >= 0) play(idx);
+      window.closeVideoList();
+      try {
+        window.webkit.messageHandlers.listClosed.postMessage("selected");
+      } catch (e) {}
     };
     window.togglePlayPause = () => {
       if (!player.current) return;
@@ -248,6 +273,13 @@ export default function App() {
 
         {listOpen && (
           <div
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              // 바닥에서 200px 이내로 스크롤되면 다음 페이지 요청 (진짜 무한 스크롤처럼)
+              if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+                window.maybeRequestMoreForList();
+              }
+            }}
             style={{
               position: "absolute",
               inset: 0,
@@ -273,10 +305,7 @@ export default function App() {
             {listItems.map((item) => (
               <div
                 key={item.id}
-                onClick={() => {
-                  window.playVideoById(item.id);
-                  setListOpen(false);
-                }}
+                onClick={() => window.playVideoById(item.id)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -303,11 +332,25 @@ export default function App() {
                     color: "#fff",
                     fontSize: 12,
                     lineHeight: 1.3,
-                    paddingRight: 8,
+                    flex: 1,
+                    minWidth: 0,
                   }}
                 >
                   {item.title || item.id}
                 </div>
+                {item.duration && (
+                  <div
+                    style={{
+                      color: item.duration === "LIVE" ? "#ff4d4d" : "#ccc",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      paddingRight: 8,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.duration}
+                  </div>
+                )}
               </div>
             ))}
           </div>
